@@ -1,0 +1,197 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mysql-user:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: user_service
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-user-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - microservices-network
+
+  mysql-catalog:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: catalog_service
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-catalog-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - microservices-network
+
+  mysql-cart:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cart_service
+    ports:
+      - "3309:3306"
+    volumes:
+      - mysql-cart-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - microservices-network
+
+  mysql-order:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: order_service
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql-order-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - microservices-network
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=mysql://root:root@mysql-user:3307/user_service
+      - RABBITMQ_URL=amqp://user:password@rabbitmq:5672
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=your-secret-key
+    volumes:
+      - ./services/user/prisma:/app/services/user/prisma
+    depends_on:
+      mysql-user:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: sh -c "sleep 10 && npm run prisma:migrate && npm start"
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=mysql://root:root@mysql-catalog:3306/catalog_service
+      - RABBITMQ_URL=amqp://user:password@rabbitmq:5672
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=your-secret-key
+    volumes:
+      - ./services/catalog/prisma:/app/services/catalog/prisma
+    depends_on:
+      mysql-catalog:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: sh -c "sleep 10 && npm run prisma:migrate && npm start"
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: services/cart/Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - DATABASE_URL=mysql://root:root@mysql-cart:3306/cart_service
+      - RABBITMQ_URL=amqp://user:password@rabbitmq:5672
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=your-secret-key
+    volumes:
+      - ./services/cart/prisma:/app/services/cart/prisma
+    depends_on:
+      mysql-cart:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: sh -c "sleep 10 && npm run prisma:migrate && npm start"
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: .
+      dockerfile: services/order/Dockerfile
+    ports:
+      - "3003:3000"
+    environment:
+      - DATABASE_URL=mysql://root:root@mysql-order:3306/order_service
+      - RABBITMQ_URL=amqp://user:password@rabbitmq:5672
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=your-secret-key
+    volumes:
+      - ./services/order/prisma:/app/services/order/prisma
+    depends_on:
+      mysql-order:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: sh -c "sleep 10 && npm run prisma:migrate && npm start"
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+volumes:
+  mysql-user-data:
+  mysql-catalog-data:
+  mysql-cart-data:
+  mysql-order-data:
+
+networks:
+  microservices-network:
+    driver: bridge
